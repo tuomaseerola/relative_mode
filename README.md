@@ -16,10 +16,9 @@ the output for each window of analysis (segments of 3 seconds as a
 default).
 
 The algorithm and how it is evaluated is fully documented in a
-manuscript titled “Major-minorness in Tonal music – Evaluation of
-Relative Mode Estimation using Expert Ratings and Audio-Based
-Key-finding Principles” by Tuomas Eerola and Michael Schutz (*Psychology
-of Music*, in press).
+paper:
+
+Eerola, T., & Schutz, M. (2025). Major-minorness in tonal music: Evaluation of relative mode estimation using expert ratings and audio-based key-finding principles. _Psychology of Music, 0(0)_. [https://doi.org/10.1177/03057356251326065](https://doi.org/10.1177/03057356251326065)
 
 ### Libraries
 
@@ -143,7 +142,4 @@ of the most plausible variations of these factors.
 
 # References
 
-Eerola, T. & Schutz, M. (in press). Major-minorness in Tonal music –
-Evaluation of Relative Mode Estimation using Expert Ratings and
-Audio-Based Key-finding Principles. *Psychology of Music, X(xx)*,
-xxx-xxx.
+Eerola, T., & Schutz, M. (2025). Major-minorness in tonal music: Evaluation of relative mode estimation using expert ratings and audio-based key-finding principles. _Psychology of Music, 0(0)_. [https://doi.org/10.1177/03057356251326065](https://doi.org/10.1177/03057356251326065)
