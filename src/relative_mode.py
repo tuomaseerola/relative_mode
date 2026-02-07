@@ -4,9 +4,14 @@
 #
 # Full documentation of this model is available from
 # [https://github.com/tuomaseerola/relative_mode](https://github.com/tuomaseerola/relative_mode)
+#
+# Minor improvements 1.1 (January 2026, TE):
+# - output of the RM_segments has onset time in seconds
+# - interpolation method can be selected: 'cubic', 'linear', or 'none'
+# - dynamic tick step calculation to ensure 5-7 ticks on x-axis
+
 
 #### libraries ####
-
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -15,6 +20,7 @@ import librosa.display
 import math
 from scipy import spatial
 import heapq
+from scipy.interpolate import interp1d
 
 #### import helper functions ####
 
@@ -240,7 +246,7 @@ class Tonal_Fragment(object):
 #### Other functions ####
 # This is a meta-function that runs the tonal_fragment across the windows
 
-def relative_mode(y, sr, winlen=3, hoplen=3, distance='cosine', profile='albrecht', chromatype='CENS'):
+def relative_mode(y, sr, winlen=3, hoplen=3, cropfirst=0, croplast=0, distance='cosine', profile='albrecht', chromatype='CENS', remove_percussive = False):
     """
     Run relative mode estimation across analysis windows. 
 
@@ -249,28 +255,44 @@ def relative_mode(y, sr, winlen=3, hoplen=3, distance='cosine', profile='albrech
         sr: sampling rate
         winlen: analysis window length in seconds
         hoplen: analysis window hop length in seconds
+        cropfirst: number of seconds to crop from the beginning of the audio
+        croplast: number of seconds to crop from the end of the audio
         distance: distance measure (string), either cosine, pearson, or euclidean
         profile: key profile used (string), either krumhansl, albrecht, simple, aarden
         chromatype: type of chroma extraction (string), either CQT, CENS, HPCC
-
+        remove_percussive (bool): Whether to remove percussive elements from the audio. Default is False.
+     
     Returns:
         df: relative mode scalar value (-1 to +1).
         df_segment: relative mode scalar value (-1 to +1) for each window
     """
+    # Crop the audio based on cropfirst and croplast
+    total_duration = librosa.get_duration(y=y, sr=sr)
+    start_sample = int(cropfirst * sr)
+    end_sample = int((total_duration - croplast) * sr)
+    y = y[start_sample:end_sample]
+    # Handle tuning
     t = librosa.estimate_tuning(y=y, sr=sr)
     y440 = librosa.effects.pitch_shift(y, sr=sr, n_steps=-t)
-    df = pd.DataFrame(columns=['tonmaxmaj', 'tonmaxmin', 'tondeltamax', 'tondeltamaxMd', 'tondeltamaxSi'])
+    # remove percusive elements if requested
+    if remove_percussive:
+        y440_stft = librosa.stft(y440)
+        y440_stft_harmonic, y440_stft_percussive = librosa.decompose.hpss(y440_stft)
+        y440 = librosa.istft(y440_stft_harmonic, length=len(y440))
+
+    df = pd.DataFrame(columns=['tonmaxmaj', 'tonmaxmin', 'tondeltamax'])
 
     df_segments = pd.DataFrame(columns=['onset', 'tonmaxmaj', 'tonmaxmin', 'tonkey', 'tondeltamax'])
     frames = librosa.util.frame(y440, frame_length=int(sr * winlen), hop_length=int(sr * hoplen))
     N = int(frames.shape[1])
     for ii in range(0, N):
         ton = Tonal_Fragment(frames[:, ii], sr, distance=distance, profile=profile, chromatype=chromatype)
-        df_segments.loc[len(df_segments)] = [ii, ton.max_maj, ton.max_min, ton.key, ton.maj_min_delta_max]
+        # Update onset to reflect actual time in seconds
+        onset_time = ii * hoplen
+        df_segments.loc[len(df_segments)] = [onset_time, ton.max_maj, ton.max_min, ton.key, ton.maj_min_delta_max]
 
     df.loc[len(df)] = [np.mean(df_segments['tonmaxmaj']), np.mean(df_segments['tonmaxmin']),
-                       np.mean(df_segments['tondeltamax']), np.median(df_segments['tondeltamax']),
-                       sum(np.sign(df_segments['tondeltamax']))]
+                       np.mean(df_segments['tondeltamax'])]
     return df, df_segments
 
 
@@ -286,7 +308,7 @@ from scipy.interpolate import interp1d
 
 # function to plot CME across time
 def RME_across_time(filename=None, winlen=3, hoplen=3, cropfirst=0, croplast=0, chromatype='CQT', profile='krumhansl',
-                    octaves=7, thres=0, bins_octave=36, wlensmooth=41, distance='pearson', plot=False):
+                    octaves=7, thres=0, bins_octave=36, wlensmooth=41, distance='pearson', plot=False, interpolation='cubic',remove_percussive=False):
     """
      Calculate the chroma movement energy (CME) of an audio signal across time and plot it.
 
@@ -303,6 +325,8 @@ def RME_across_time(filename=None, winlen=3, hoplen=3, cropfirst=0, croplast=0, 
      bins_per_octave (int): The number of bins per octave.
      window_len_smooth (int): The length of the smoothing window.
      distance (str): The distance metric to use.
+     interpolation (str): Interpolation method for time ('cubic', 'linear', or 'none'). Default is 'cubic'.
+     remove_percussive (bool): Whether to remove percussive elements from the audio. Default is False.
 
      Returns:
      fig (matplotlib.figure.Figure): The resulting plot.
@@ -312,67 +336,74 @@ def RME_across_time(filename=None, winlen=3, hoplen=3, cropfirst=0, croplast=0, 
     y, sr = librosa.load(filename)
     d = librosa.get_duration(y=y, sr=sr)  #
     y, sr = librosa.load(filename, offset=0 + cropfirst, duration=d - croplast)
-    dur = librosa.get_duration(y=y, sr=sr)  #
 
     # handle tuning
     t = librosa.estimate_tuning(y=y, sr=sr)
     y440 = librosa.effects.pitch_shift(y, sr=sr, n_steps=-t)
-
+    # remove percusive elements if requested
+    if remove_percussive:
+        y440_stft = librosa.stft(y440)
+        y440_stft_harmonic, y440_stft_percussive = librosa.decompose.hpss(y440_stft)
+        y440 = librosa.istft(y440_stft_harmonic, length=len(y440))
     # create timeline for segments
-    total = dur - winlen
-    seg = np.arange(0, total, hoplen)
-    df_segments = pd.DataFrame(columns=['onset', 'tonkey', 'tondeltamax'])
+    df_segments = pd.DataFrame(columns=['onset', 'tonmaxmaj', 'tonmaxmin','tonkey', 'tondeltamax'])
     frames = librosa.util.frame(y440, frame_length=int(sr * winlen), hop_length=int(sr * hoplen))
     N = int(frames.shape[1])
+    seg = np.arange(0, N) * hoplen
     for i in range(0, N):
         ton = Tonal_Fragment(frames[:, i], sr, chromatype=chromatype, profile=profile, distance=distance)
-        df_segments.loc[len(df_segments)] = [seg[i], ton.key, ton.maj_min_delta_max]
+        df_segments.loc[len(df_segments)] = [seg[i], ton.max_maj, ton.max_min, ton.key, ton.maj_min_delta_max]
+
+    # Correct the `onset` column to reflect actual frame start times
+    df_segments['onset'] = np.arange(0, N) * (hoplen * sr) / sr
 
     #################
     # create figure
-    if (plot == True):
+    if plot:
 
-    # interpolate time
-        x = np.linspace(0, max(df_segments['onset']), num=df_segments.shape[1], endpoint=True)
-        xnew = np.linspace(0, max(df_segments['onset']), num=200, endpoint=True)
-        f_linear = interp1d(df_segments['onset'], df_segments['tondeltamax'], kind='cubic')
+        # interpolate time
+        if interpolation != 'none':
+            f_linear = interp1d(df_segments['onset'], df_segments['tondeltamax'], kind=interpolation)
+            xnew = np.linspace(0, max(df_segments['onset']), num=200, endpoint=True)
+            interpolated_values = f_linear(xnew)
+        else:
+            xnew = df_segments['onset']
+            interpolated_values = df_segments['tondeltamax']
 
+        # Ensure `fig` and `ax` are defined before plotting
         fig, ax = plt.subplots(figsize=(9, 3.5))
 
-    # waveform
-        librosa.display.waveshow(y440, sr=sr, axis='time', ax=ax, color='gray')
+        # interpolated RME
+        ax.plot(xnew + winlen / 2, interpolated_values, linewidth=4, color='blue')
 
-    # interpolated RME
-        ax.plot(xnew + winlen / 2, f_linear(xnew), linewidth=4, color='blue')
-
-    # segment starts
+        # segment starts
         ax.vlines(df_segments['onset'], -0.5, 0.5, color='black', linestyle='--',
-              linewidth=1, alpha=1.0)
+                  linewidth=1, alpha=1.0)
         ax.hlines(y=0, xmin=0, xmax=max(df_segments['onset']) + winlen, color='white', linestyle='-', linewidth=2,
-              alpha=1.0)
+                  alpha=1.0)
 
         ax.set(xlim=(0, max(df_segments['onset']) + winlen), ylim=(-1.00, 1.00))
-        ax.set_xticks(np.arange(0, (max(df_segments['onset']) + winlen), step=1))
 
-    # Create title
-    # title_str = filename + ' RME:' + str(round(np.mean(df_segments['tondeltamax']),3))
-    # ax.set(title=title_str)
-        ax.set(ylabel='RME (-1.0 to +1.0)')
+        # Dynamically calculate step size for ticks to ensure 5-7 ticks
+        max_onset = max(df_segments['onset']) + winlen
+        num_ticks = 7  # Target number of ticks
+        step = max(1, round(max_onset / num_ticks))
+        ax.set_xticks(np.arange(0, max_onset, step=step))
 
-    # Add labels to the middle of windows
+        # Add labels to the middle of windows
         for i in range(0, len(df_segments)):
             ax.text(np.array(df_segments['onset'][i] + winlen / 2), df_segments['tondeltamax'][i] + 0.0,
-                np.array(round(df_segments['tondeltamax'][i], 2)), color='white', size=10,
-                bbox=dict(boxstyle="round", ec=(1.0, 1.0, 1.0), fc=(0.0, 0.0, 0.0)))
+                    np.array(round(df_segments['tondeltamax'][i], 2)), color='white', size=10,
+                    bbox=dict(boxstyle="round", ec=(1.0, 1.0, 1.0), fc=(0.0, 0.0, 0.0)))
             ax.text(np.array(df_segments['onset'][i] + winlen / 2), df_segments['tondeltamax'][i] + 0.08,
-                np.array(df_segments['tonkey'][i]), color='white', size=10,
-                bbox=dict(boxstyle="round", ec=(1.0, 1.0, 1.0)))
+                    np.array(df_segments['tonkey'][i]), color='white', size=10,
+                    bbox=dict(boxstyle="round", ec=(1.0, 1.0, 1.0)))
         fig.tight_layout()
     # outputfilename = filename + '.png'
     # print(outputfilename)
     # fig.savefig(outputfilename)
-    if plot==True:
+    if plot:
         return ax, df_segments 
-    elif plot==False:
-        return df_segments 
+    else:
+        return df_segments
 

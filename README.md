@@ -3,6 +3,8 @@
 
 <!--conda activate relative_mode-->
 
+<!--conda activate myenv--->
+
 This package contains Python code for calculating *relative mode* from
 an audio signal. *Relative mode* refers to the degree between how major
 or minor does the segment of music sound at a given time. It is based on
@@ -16,13 +18,17 @@ the output for each window of analysis (segments of 3 seconds as a
 default).
 
 The algorithm and how it is evaluated is fully documented in a
-paper:
-
-Eerola, T., & Schutz, M. (2025). Major-minorness in tonal music: Evaluation of relative mode estimation using expert ratings and audio-based key-finding principles. _Psychology of Music, 0(0)_. [https://doi.org/10.1177/03057356251326065](https://doi.org/10.1177/03057356251326065)
+manuscript titled “Major-minorness in Tonal music – Evaluation of
+Relative Mode Estimation using Expert Ratings and Audio-Based
+Key-finding Principles” by Tuomas Eerola and Michael Schutz (*Psychology
+of Music*, in press). Key-finding Principles” by Tuomas Eerola and
+Michael Schutz (*Psychology of Music*,
+[2025](https://doi.org/10.1177/03057356251326065)).
 
 ### Libraries
 
 ``` python
+import librosa
 import librosa.display
 import matplotlib
 import numpy as np
@@ -33,7 +39,9 @@ import pandas as pd
 ### Load package using pip
 
 ``` python
-pip install relative_mode
+#pip install relative_mode
+# local install
+#pip install --no-index --find-links /srv/pkg ~/Desktop/relative_mode/dist/relative_mode-0.0.3.tar.gz
 ```
 
 Make function calls explicit for the subsequent analyses.
@@ -56,18 +64,42 @@ librosa.display.waveshow(y, sr = sr)
 plt.show()
 ```
 
+<div id="fig-waveform">
+
 ![](README_files/figure-commonmark/fig-waveform-output-1.png)
+
+Figure 1: Waveform of the C Major Prelude.
+
+</div>
 
 ### Estimate relative mode
 
 Here we don’t specify any parameters but just run `relative_mode`.
 
 ``` python
-RM, RM_segments = relative_mode(y = y, sr = sr)
+RM, RM_segments = relative_mode(y = y, sr = sr, winlen = 3.5, hoplen = 1.5, cropfirst = 0, croplast = 15)
 print(round(RM['tondeltamax'][0],3))
+
+RM, RM_segments = relative_mode(y = y, sr = sr, winlen = 3.5, hoplen = 1.5, cropfirst = 0, croplast = 15,remove_percussive=True)
+print(round(RM['tondeltamax'][0],3))
+
+
+print(RM_segments)
 ```
 
-    0.258
+    0.475
+    0.571
+       onset  tonmaxmaj  tonmaxmin   tonkey  tondeltamax
+    0    0.0   0.895319   0.730949  C major     1.068404
+    1    1.5   0.944695   0.805112  C major     0.907290
+    2    3.0   0.921238   0.838886  C major     0.535289
+    3    4.5   0.766527   0.850092  D minor    -0.543171
+    4    6.0   0.876043   0.834032  G major     0.273075
+    5    7.5   0.855947   0.757587  G major     0.639340
+    6    9.0   0.927221   0.858836  G major     0.444506
+    7   10.5   0.977284   0.850480  C major     0.824227
+    8   12.0   0.878142   0.710265  C major     1.091195
+    9   13.5   0.876234   0.803292  C major     0.474120
 
 The value of *0.258* could be called “moderately in major”. Value closer
 to 0 would indicate no clear tendency for major or minor and any value
@@ -84,18 +116,38 @@ RM2, RM2_segments = relative_mode(y = y, sr = sr, profile = 'simple', distance =
 print(RM2)
 ```
 
-       tonmaxmaj  tonmaxmin  tondeltamax  tondeltamaxMd  tondeltamaxSi
-    0   0.688322   0.640134     0.144563       0.176965            3.0
+       tonmaxmaj  tonmaxmin  tondeltamax
+    0   0.688322   0.640134     0.144563
+
+This outputs the value of `0.145`.
 
 ### Estimate relative mode across the excerpt
 
 ``` python
-fig, RM3 = RME_across_time(filename = filename, winlen = 3, hoplen = 3, cropfirst = 0, croplast = 0, chromatype = 'CENS', profile = 'albrecht', distance = 'cosine', plot = True)
+fig, RM3 = RME_across_time(filename = filename, winlen = 2, hoplen = 2, cropfirst = 0, croplast = 15, chromatype = 'CENS', profile = 'albrecht', distance = 'cosine', plot = True,interpolation='cubic')
 fig
 plt.show()
+print(RM3)
 ```
 
+<div id="fig-continuous">
+
 ![](README_files/figure-commonmark/fig-continuous-output-1.png)
+
+Figure 2: Relative mode across time.
+
+</div>
+
+       onset  tonmaxmaj  tonmaxmin   tonkey  tondeltamax
+    0    0.0   0.936137   0.813037  C major     0.800152
+    1    2.0   0.769295   0.732500  C major     0.239169
+    2    4.0   0.844900   0.900871  D minor    -0.363813
+    3    6.0   0.811388   0.834862  D minor    -0.152580
+    4    8.0   0.895642   0.790393  G major     0.684117
+    5   10.0   0.938461   0.872848  G major     0.426486
+    6   12.0   0.886525   0.754088  C major     0.860841
+    7   14.0   0.809595   0.777271  C major     0.210107
+    8   16.0   0.781967   0.926566  A minor    -0.939897
 
 ## Alternative analyses
 
@@ -140,6 +192,37 @@ extensive analysis of the potential additional considerations would
 benefit from a larger set of materials and from systematic alterations
 of the most plausible variations of these factors.
 
+### Technical improvements to the implementation
+
+- for `RME_across_time`, it now accepts interpolation parameter to
+  control the way output is interpolated across the analysis windows.
+  `cubic` is the default, but `linear` and `none` are possible as well.
+
+- The output of the segments has now explicit time code (onset time in
+  seconds).
+
+- Weight to normalise `tondeltamax` output between -1 and +1 depends on
+  the distance metric used. These weights were empirically derived by
+  creating all possible 3 to 5-note chords and calculating the RME with
+  the available metrics. For cosine distance metric, the weight is
+  `6.5`, for pearson correlation, `10.0`, and for euclidean distance,
+  `3.0`. The purpose is to keep the output more easily understandable
+  `(max major corr. - max minor corr.) * weigth`.
+
+- cropfirst and cropfirst parameter works (note that time is calculated
+  from the revised audio, not the original)
+
+- output of the `RM_across_time` has now ‘tonmaxmaj’ and ‘tonmaxmin’
+  output and the text output is unaffected by interpolation.
+
+- new option `remove_percussive` has been added to remove percussive
+  noise using (`Librosa`’s median filtering solution, see
+  `librosa.decompose.hpss`) from the signal. It is set to `False` by
+  default.
+
 # References
 
-Eerola, T., & Schutz, M. (2025). Major-minorness in tonal music: Evaluation of relative mode estimation using expert ratings and audio-based key-finding principles. _Psychology of Music, 0(0)_. [https://doi.org/10.1177/03057356251326065](https://doi.org/10.1177/03057356251326065)
+Eerola, T. & Schutz, M. (2025). Major-minorness in Tonal music –
+Evaluation of Relative Mode Estimation using Expert Ratings and
+Audio-Based Key-finding Principles. *Psychology of Music*.
+<https://doi.org/10.1177/03057356251326065>

@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 [project]
 name = "relative_mode"
-version = "0.0.3"
+version = "0.0.4"
 authors = [
   { name="Tuomas Eerola", email="tuomaseerola39@gmail.com" },
 ]

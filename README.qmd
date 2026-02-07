@@ -4,6 +4,7 @@ format: gfm
 jupyter: python3
 ---
 <!--conda activate relative_mode-->
+<!--conda activate myenv--->
 
 This package contains Python code for calculating _relative mode_ from an audio
 signal. _Relative mode_ refers to the degree between how major or minor does
@@ -18,10 +19,12 @@ The algorithm and how it is evaluated is fully documented in a
 manuscript titled “Major-minorness in Tonal music – Evaluation of
 Relative Mode Estimation using Expert Ratings and Audio-Based
 Key-finding Principles” by Tuomas Eerola and Michael Schutz (_Psychology of Music_, in press).
+Key-finding Principles” by Tuomas Eerola and Michael Schutz (_Psychology of Music_, [2025](https://doi.org/10.1177/03057356251326065)).
 
 ### Libraries
 
 ```{python}
+import librosa
 import librosa.display
 import matplotlib
 import numpy as np
@@ -34,7 +37,10 @@ import pandas as pd
 ```{python}
 #| echo: true
 #| eval: false
-pip install relative_mode
+#pip install relative_mode
+# local install
+#pip install --no-index --find-links /srv/pkg ~/Desktop/relative_mode/dist/relative_mode-0.0.3.tar.gz
+
 ```
 
 Make function calls explicit for the subsequent analyses. 
@@ -65,8 +71,14 @@ plt.show()
 Here we don't specify any parameters but just run `relative_mode`.
 
 ```{python}
-RM, RM_segments = relative_mode(y = y, sr = sr)
+RM, RM_segments = relative_mode(y = y, sr = sr, winlen = 3.5, hoplen = 1.5, cropfirst = 0, croplast = 15)
 print(round(RM['tondeltamax'][0],3))
+
+RM, RM_segments = relative_mode(y = y, sr = sr, winlen = 3.5, hoplen = 1.5, cropfirst = 0, croplast = 15,remove_percussive=True)
+print(round(RM['tondeltamax'][0],3))
+
+
+print(RM_segments)
 ```
 The value of _0.258_ could be called "moderately in major". Value closer to 0 would indicate no clear tendency for major or minor and any value below -0.30 would suggest clearly in minor key.
 
@@ -77,14 +89,17 @@ RM2, RM2_segments = relative_mode(y = y, sr = sr, profile = 'simple', distance =
 print(RM2)
 ```
 
+This outputs the value of `0.145`.
+
 ### Estimate relative mode across the excerpt
 
 ```{python}
 #| label: fig-continuous
 #| fig-cap: "Relative mode across time."
-fig, RM3 = RME_across_time(filename = filename, winlen = 3, hoplen = 3, cropfirst = 0, croplast = 0, chromatype = 'CENS', profile = 'albrecht', distance = 'cosine', plot = True)
+fig, RM3 = RME_across_time(filename = filename, winlen = 2, hoplen = 2, cropfirst = 0, croplast = 15, chromatype = 'CENS', profile = 'albrecht', distance = 'cosine', plot = True,interpolation='cubic')
 fig
 plt.show()
+print(RM3)
 ```
 
 ## Alternative analyses
@@ -103,7 +118,21 @@ We also run alternative formulations of window length (1 to 5 seconds) and overl
 
 To identify the consistent noise factors in the RME analysis from audio, we extracted dynamics, several timbral descriptors (brightness, spectral centroid, spectral flux, rms, roughness) and tempo descriptors for each excerpt using [Essentia](https://essentia.upf.edu), and added these as additional predictors to the regression with RME model predicting the expert ratings. However, no single audio descriptor could contribute significantly (more than 2 % of the variance accounted) to the model that already had a highly successful predictor (RME) within it. A more extensive analysis of the potential additional considerations would benefit from a larger set of materials and from systematic alterations of the most plausible variations of these factors. 
 
+### Version 1.1 Improvements
+
+- for `RME_across_time`, it now accepts interpolation parameter to control the way output is interpolated across the analysis windows. `cubic` is the default, but `linear` and `none` are possible as well.
+
+- The output of the segments has now explicit time code (onset time in seconds).
+
+- Weight to normalise `tondeltamax` output between -1 and +1 depends on the distance metric used. These weights were empirically derived by creating all possible 3 to 5-note chords and calculating the RME with the available metrics. For cosine distance metric, the weight is `6.5`, for pearson correlation, `10.0`, and for euclidean distance, `3.0`. The purpose is to keep the output more easily understandable `(max major corr. - max minor corr.) * weigth`.
+
+- cropfirst and cropfirst parameter work for `RME_across_time`.
+
+- output of the `RM_across_time` has now 'tonmaxmaj' and 'tonmaxmin' output and the numeric output is unaffected by interpolation.
+
+- new option `remove_percussive` has been added to remove percussive noise (using `Librosa`'s median filtering solution, see `librosa.decompose.hpss`) from the signal. Filtering is set to `False` by default.  
+
 # References
 
-Eerola, T. & Schutz, M. (in press). Major-minorness in Tonal music – Evaluation of Relative Mode Estimation using Expert Ratings and Audio-Based Key-finding Principles. _Psychology of Music, X(xx)_, xxx-xxx.
+Eerola, T. & Schutz, M. (2025). Major-minorness in Tonal music – Evaluation of Relative Mode Estimation using Expert Ratings and Audio-Based Key-finding Principles. _Psychology of Music_. [https://doi.org/10.1177/03057356251326065](https://doi.org/10.1177/03057356251326065)
 
